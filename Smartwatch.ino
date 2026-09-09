@@ -19,10 +19,9 @@ Adafruit_SHT4x sht4 = Adafruit_SHT4x();
 RTC_DS3231 rtc;
 char daysOfTheWeek[7][12] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
 
-int page;
-int app;
-float temp_max = -10000;
-float temp_min = 10000;
+int page = 0;
+int app = -1;
+
 
 /*Set to your screen resolution and rotation*/
 #define TFT_HOR_RES 240
@@ -64,6 +63,8 @@ void setup() {
   //Button Pins
   pinMode(2, INPUT);
   pinMode(9, INPUT);
+  ledcSetup(5, 131, 12);
+  ledcAttachPin(4, 5);
 
   String LVGL_Arduino = "Hello Arduino! ";
   LVGL_Arduino += String('V') + lv_version_major() + "." + lv_version_minor() + "." + lv_version_patch();
@@ -88,10 +89,10 @@ void setup() {
     Serial.println("RTC lost power, let's set the time!");
     // When time needs to be set on a new device, or after a power loss, the
     // following line sets the RTC to the date & time this sketch was compiled
-    //rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
     // This line sets the RTC with an explicit date & time, for example to set
     // January 21, 2014 at 3am you would call:
-    rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
+    //rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
   }
 
   lv_init();
@@ -128,7 +129,7 @@ void setup() {
   lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0xffffff), LV_PART_MAIN);
   widgetSetup();
   pageChange();
-  setupHomeScreen();
+  setupHomepage();
 
   Serial.println("Setup done");
 }
@@ -143,6 +144,7 @@ void setup() {
 //LVGL Widgets
 lv_obj_t *label_time;
 lv_obj_t *label_name;
+lv_obj_t *label_date;
 lv_obj_t *panel_name;
 lv_obj_t *image_icon;
 lv_obj_t *chart_temp;
@@ -166,7 +168,13 @@ void widgetSetup() {
   label_time = lv_label_create(lv_screen_active());
   lv_obj_set_align(label_time, LV_ALIGN_CENTER);
   lv_obj_set_style_text_align(label_time, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-  lv_obj_set_style_text_line_space(label_time, 10, LV_PART_MAIN);
+  lv_obj_set_style_text_line_space(label_time, 5, LV_PART_MAIN);
+
+  //label: date
+  label_date = lv_label_create(lv_screen_active());
+  lv_obj_set_align(label_date, LV_ALIGN_CENTER);
+  lv_obj_set_style_text_font(label_date, &lv_font_montserrat_20, LV_PART_MAIN);
+  lv_obj_set_style_text_align(label_date, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
 
   //panel: name
   panel_name = lv_obj_create(lv_screen_active());
@@ -185,12 +193,10 @@ void widgetSetup() {
   //image: icon
   image_icon = lv_image_create(lv_screen_active());
   lv_obj_align(image_icon, LV_ALIGN_CENTER, 0, -20);
-
   
   //scale: temp
   scale_temp = lv_scale_create(lv_screen_active());
-//  lv_obj_align(scale_temp, LV_ALIGN_CENTER, -150, 0);
-  lv_obj_align(scale_temp, LV_ALIGN_CENTER, 70, 0);
+  lv_obj_align(scale_temp, LV_ALIGN_CENTER, 85, 0);
   lv_scale_set_mode(scale_temp, LV_SCALE_MODE_VERTICAL_LEFT);
   lv_obj_set_size(scale_temp, 30, 200);
   lv_scale_set_label_show(scale_temp, true);
@@ -200,60 +206,99 @@ void widgetSetup() {
   lv_obj_set_style_length(scale_temp, 10, LV_PART_INDICATOR);
 }
 
-void pageChange() {
+void pageChange() { //other than page 0, all other pages have the same format: icon, panel and a label
   if (page == 0) { //time
+    setupHomepage();
     lv_obj_remove_flag(label_time, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_remove_flag(label_name, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_remove_flag(panel_name, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(label_date, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(image_icon, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(chart_temp, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(scale_temp, LV_OBJ_FLAG_HIDDEN);
-    setupHomeScreen();
-  } else if (page == 1) { //stopwatch
+  } else {
+    setupPage();
     lv_obj_add_flag(label_time, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_remove_flag(label_name, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_remove_flag(panel_name, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(label_date, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(image_icon, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(chart_temp, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(scale_temp, LV_OBJ_FLAG_HIDDEN);
-    setupStopwatchScreen();
-  } else if (page == 2) { //timer
-    lv_obj_add_flag(label_time, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_remove_flag(label_name, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_remove_flag(panel_name, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(chart_temp, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_remove_flag(image_icon, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(scale_temp, LV_OBJ_FLAG_HIDDEN);
-    setupTimerScreen();
-  } else if (page == 3) { //temperature
-    lv_obj_add_flag(label_time, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_remove_flag(label_name, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_remove_flag(panel_name, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(chart_temp, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_remove_flag(image_icon, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_add_flag(scale_temp, LV_OBJ_FLAG_HIDDEN);
-    setupTempScreen();
+  }
+  lv_obj_remove_flag(panel_name, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_remove_flag(label_name, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(chart_temp, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(scale_temp, LV_OBJ_FLAG_HIDDEN);
+}
+
+
+void setupHomepage() {
+  //label: date
+  lv_obj_set_y(label_date, -80);
+  //label: time
+  lv_obj_set_style_text_font(label_time, &lv_font_montserrat_48, LV_PART_MAIN); /*Set a larger font*/
+  lv_obj_set_style_text_letter_space(label_time, 5, LV_PART_MAIN);
+  lv_obj_set_y(label_time, -10);
+  updateTime(0);
+  //label: name
+  lv_label_set_text(label_name, "Welcome, Eunwoo");
+  //panel: name
+  lv_obj_set_size(panel_name, 150, 35);
+}
+
+
+void setupPage() {
+  if (page == 1) {
+    //label: name
+    lv_label_set_text(label_name, "Stopwatch");
+    //panel: name
+    lv_obj_set_size(panel_name, 95, 35);
+    //image: icon
+    lv_img_set_src(image_icon, &STOPWATCH_ICON_INFO);
+  } else if (app == 2) {
+    //label: name
+    lv_label_set_text(label_name, "Timer");
+    //panel: name
+    lv_obj_set_size(panel_name, 60, 35);
+    //image: icon
+    lv_img_set_src(image_icon, &TIMER_ICON_INFO);
+  } else if (app == 3) {
+    //panel: name
+    lv_obj_set_size(panel_name, 115, 35);
+    //label: name
+    lv_label_set_text(label_name, "Temp & Hum");
+    //image: icon
+    lv_img_set_src(image_icon, &TEMP_ICON_INFO);
   }
 }
 
 void appChange() {
-  if (app == 1) { //stopwatch
+  if (page == 0) { //time
+    setupHomeApp();
     lv_obj_remove_flag(label_time, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(label_name, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(label_date, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(panel_name, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(image_icon, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(chart_temp, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(scale_temp, LV_OBJ_FLAG_HIDDEN);
+  } else if (app == 1) { //stopwatch
+    setupStopwatchApp();
+    lv_obj_remove_flag(label_time, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(label_name, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(label_date, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(panel_name, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(chart_temp, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(image_icon, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(scale_temp, LV_OBJ_FLAG_HIDDEN);
   } else if (app == 2) { //timer
+    setupTimerApp();
     lv_obj_remove_flag(label_time, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(label_name, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(label_date, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(panel_name, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(chart_temp, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(image_icon, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(scale_temp, LV_OBJ_FLAG_HIDDEN);
   } else if (app == 3) { //temperature
+    setupTempApp();
+    updateTemp();
     lv_obj_remove_flag(label_time, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(label_name, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(label_date, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(panel_name, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(chart_temp, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(scale_temp, LV_OBJ_FLAG_HIDDEN);
@@ -261,93 +306,75 @@ void appChange() {
   }
 }
 
-void setupHomeScreen() {
+void setupHomeApp() {
   //label: time
-  lv_obj_set_style_text_font(label_time, &lv_font_montserrat_48, LV_PART_MAIN); /*Set a larger font*/
-  lv_obj_set_style_text_letter_space(label_time, 5, LV_PART_MAIN);
-  lv_obj_set_y(label_time, -20);
-  updateTime();
-
-  //label: name
-  lv_label_set_text(label_name, "Welcome, Eunwoo");
-
-  //panel: name
-  lv_obj_set_size(panel_name, 150, 35);
+  lv_obj_set_y(label_time, 0);
 }
 
-void setupStopwatchScreen() {
+void setupStopwatchApp() {
   //label: time
   lv_obj_set_style_text_font(label_time, &lv_font_montserrat_44, LV_PART_MAIN); /*Set a larger font*/
   lv_obj_set_style_text_letter_space(label_time, 0, LV_PART_MAIN);
   lv_label_set_text(label_time, "00:00:00");
   lv_obj_set_y(label_time, 0);
-
-  //label: name
-  lv_label_set_text(label_name, "Stopwatch");
-
-  //panel: name
-  lv_obj_set_size(panel_name, 95, 35);
-
-  //image: icon
-  lv_img_set_src(image_icon, &STOPWATCH_ICON_INFO);
 }
 
-void setupTimerScreen() {
+void setupTimerApp() {
   //label: time
   lv_obj_set_style_text_font(label_time, &lv_font_montserrat_44, LV_PART_MAIN); /*Set a larger font*/
   lv_obj_set_style_text_letter_space(label_time, 0, LV_PART_MAIN);
   lv_label_set_text(label_time, "00:00:00");
   lv_obj_set_y(label_time, 0);
-
-  //label: name
-  lv_label_set_text(label_name, "Timer");
-
-  //panel: name
-  lv_obj_set_size(panel_name, 60, 35);
-  
-  //image: icon
-  lv_img_set_src(image_icon, &TIMER_ICON_INFO);
 }
 
-void setupTempScreen() {
+void setupTempApp() {
   //label: time
-  lv_obj_set_style_text_font(label_time, &lv_font_montserrat_20, LV_PART_MAIN); /*Set a larger font*/
+  lv_obj_set_style_text_font(label_time, &lv_font_montserrat_20, LV_PART_MAIN);
   lv_obj_set_style_text_letter_space(label_time, 0, LV_PART_MAIN);
   lv_obj_set_y(label_time, 70);
-  updateTemp();
-
-  //panel: name
-  lv_obj_set_size(panel_name, 115, 35);
-  
-  //label: name
-  lv_label_set_text(label_name, "Temp & Hum");
-
-  //image: icon
-  lv_img_set_src(image_icon, &TEMP_ICON_INFO);
 }
 
 
 void updateTemp() {
-  sensors_event_t humidity, temp;
-  sht4.getEvent(&humidity, &temp);
-  lv_label_set_text_fmt(label_time, "%.2f°C\n%.2f%%", temp.temperature, humidity.relative_humidity);
-  if (temp.temperature > temp_max) {
-    temp_max = temp.temperature * 100;
+  int temp_max = -10000;
+  int temp_min = 10000;
+  int32_t *temp_arr = lv_chart_get_series_y_array(chart_temp, ser_temp);
+  for (int i = 0; i < 10; i++) {
+    int temp_arr_val = *(temp_arr + i);
+    Serial.println(temp_arr_val);
+    if (temp_arr_val > temp_max && temp_arr_val < 10000) {
+      temp_max = temp_arr_val;
+    }
+    if (temp_arr_val < temp_min && temp_arr_val > -10000) {
+      temp_min = temp_arr_val;
+    }
   }
-  if (temp.temperature < temp_min) {
-    temp_min = temp.temperature * 100;
-  }
-  float buffer = (temp_max - temp_min) * 0.1;
-  lv_chart_set_axis_range(chart_temp, LV_CHART_AXIS_PRIMARY_Y, temp_max + buffer, temp_min - buffer);
-  lv_scale_set_range(scale_temp, temp_max + buffer, temp_min - buffer);
-  lv_chart_set_next_value(chart_temp, ser_temp, temp.temperature * 100);
+
+  int buffer = (temp_max - temp_min) * 0.1;
+  temp_max += buffer;
+  temp_min -= buffer;
+  Serial.println(temp_max);
+  Serial.println(temp_min);
+  lv_chart_set_axis_range(chart_temp, LV_CHART_AXIS_PRIMARY_Y, temp_min, temp_max);
+  lv_scale_set_range(scale_temp, temp_min, temp_max);
 }
 
 DateTime now;
 
-void updateTime() {
+void updateTime(int minute) {
   // Get the current time from the RTC
   now = rtc.now();
+
+  if (minute != 0) {
+    int newMinute = now.minute() + minute;
+    if (newMinute < 0) {
+      rtc.adjust(DateTime(now.year(), now.month(), now.day(), now.hour() - 1, 59, 0));
+    } else if (newMinute > 59) {
+      rtc.adjust(DateTime(now.year(), now.month(), now.day(), now.hour() + 1, 0, 0));
+    } else {
+      rtc.adjust(DateTime(now.year(), now.month(), now.day(), now.hour(), newMinute, 0));
+    }
+  }
 
   // Getting each time field in individual variables
   // And adding a leading zero when needed;
@@ -366,6 +393,7 @@ void updateTime() {
   Serial.println(formattedTime);
 
   lv_label_set_text_fmt(label_time, "%02u\n%02u", now.hour(), now.minute());
+  lv_label_set_text_fmt(label_date, "%u-%02u-%02u", now.year(), now.month(), now.day());
 }
 
 
@@ -399,13 +427,13 @@ void updateTimer() {
     if (millis() - timerStartTime > tempTime) {
       tempTime = 0;
       if (millis() - beepTime > 500) {
-        if (beepOn) {
-          noTone(4);
+        if (!beepOn) {
+          ledcWrite(5, 0);
         } else {
-          tone(4, 131, 500);
+          ledcWrite(5, 2048);
         }
-        beepTime = millis();
         beepOn = !beepOn;
+        beepTime = millis();
       }
     } else {
       tempTime -= millis() - timerStartTime;
@@ -423,6 +451,7 @@ void updateTimer() {
 struct previousMillis {
   unsigned long lvgl;
   unsigned long time;
+  unsigned long timeFlicker;
   unsigned long temp;
 };
 previousMillis prevMillis;
@@ -465,9 +494,11 @@ void loop() {
         app = page;
         appChange();
       } else {
-        if (app == 0) {
+        if (app == -1) {
           page--;
           pageChange();
+        } else if (app == 0) {
+          updateTime(1);
         } else if (app == 1) {
           if (!stopwatchOn) {
             stopwatchOn = true;
@@ -494,12 +525,14 @@ void loop() {
       button.next = false;
       if (millis() - button.time > 500) {
         Serial.print("Exiting App");
-        app = 0;
+        app = -1;
         pageChange();
       } else {
-        if (app == 0) {
+        if (app == -1) {
           page++;
           pageChange();
+        } else if (app == 0) {
+          updateTime(-1);
         } else if (app == 1 && !stopwatchOn) {
           stopwatchTime = 0;
           updateStopwatch();
@@ -516,7 +549,21 @@ void loop() {
     }
   }
 
-  if (stopwatchOn && app == 1) {
+  if ((page == 0 or app == 0) && millis() - prevMillis.time > 500) {
+    updateTime(0);
+    prevMillis.time = millis();
+  }
+
+  if (app == 0 && millis() - prevMillis.timeFlicker > 1000) {
+    if (lv_obj_has_flag(label_time, LV_OBJ_FLAG_HIDDEN)) {
+      lv_obj_remove_flag(label_time, LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_obj_add_flag(label_time, LV_OBJ_FLAG_HIDDEN);
+    }
+    prevMillis.timeFlicker = millis();
+  }
+
+  if (app == 1 && stopwatchOn) {
     updateStopwatch();
   }
 
@@ -524,18 +571,19 @@ void loop() {
     updateTimer();
   }
 
+  if (millis() - prevMillis.temp > 5000) {
+    sensors_event_t humidity, temp;
+    sht4.getEvent(&humidity, &temp);
+    lv_chart_set_next_value(chart_temp, ser_temp, temp.temperature * 100);
+    if (app == 3) {
+      lv_label_set_text_fmt(label_time, "%.2f°C\n%.2f%%", temp.temperature, humidity.relative_humidity);
+      updateTemp();
+    }
+    prevMillis.temp = millis();
+  }
+
   if (millis() - prevMillis.lvgl > 5) {
     lv_timer_handler(); /* let the GUI do its work */
     prevMillis.lvgl = millis();
-  }
-
-  if (millis() - prevMillis.time > 1000 && page == 0) {
-    updateTime();
-    prevMillis.time = millis();
-  }
-
-  if (millis() - prevMillis.temp > 5000 && app == 3) {
-    updateTemp();
-    prevMillis.temp = millis();
   }
 }
