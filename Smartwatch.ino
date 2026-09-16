@@ -1,19 +1,28 @@
 //icons from Phosphor Icons
+//https://notisrac.github.io/FileToCArray/ to convert icons to C array
 #include <lvgl.h>
 #include <TFT_eSPI.h>
 #include "RTClib.h"
 #include "Adafruit_SHT4x.h"
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+#include <Wire.h>
 #include "stopwatch.h"
 #include "timer.h"
 #include "temperature.h"
+#include "gyroscope.h"
 
 //Custom Icons
 LV_IMG_DECLARE(STOPWATCH_ICON_INFO);
 LV_IMG_DECLARE(TIMER_ICON_INFO);
 LV_IMG_DECLARE(TEMP_ICON_INFO);
+LV_IMG_DECLARE(GYRO_ICON_INFO);
 
 //SHT40
 Adafruit_SHT4x sht4 = Adafruit_SHT4x();
+
+//MPU6050
+Adafruit_MPU6050 mpu;
 
 //DS3231
 RTC_DS3231 rtc;
@@ -21,7 +30,7 @@ char daysOfTheWeek[7][12] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thurs
 
 int page = 0;
 int app = -1;
-
+int gyroMode = 0;
 
 /*Set to your screen resolution and rotation*/
 #define TFT_HOR_RES 240
@@ -78,6 +87,12 @@ void setup() {
   }
   sht4.setPrecision(SHT4X_HIGH_PRECISION);
   sht4.setHeater(SHT4X_NO_HEATER);
+
+  Wire.begin(6, 7);
+  mpu.begin(0x69);
+  mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+  mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
 
   if (!rtc.begin()) {
     Serial.println("Couldn't find RTC");
@@ -150,7 +165,10 @@ lv_obj_t *image_icon;
 lv_obj_t *chart_temp;
 lv_chart_series_t *ser_temp;
 lv_obj_t *scale_temp;
-lv_obj_t *chart_hum;
+lv_obj_t *acc_x_line;
+lv_obj_t *acc_y_line;
+lv_obj_t *acc_z_line;
+
 
 void widgetSetup() {
   //chart: temp
@@ -204,6 +222,24 @@ void widgetSetup() {
   lv_scale_set_major_tick_every(scale_temp, 3);
   lv_obj_set_style_length(scale_temp, 5, LV_PART_ITEMS);
   lv_obj_set_style_length(scale_temp, 10, LV_PART_INDICATOR);
+
+  //line: acc_x
+  acc_x_line = lv_line_create(lv_screen_active());
+  lv_obj_set_size(acc_x_line, 240, 240);
+  lv_obj_set_style_line_width(acc_x_line, 2, LV_PART_MAIN);
+  lv_obj_set_style_line_color(acc_x_line, lv_color_hex(0xff0000), LV_PART_MAIN);
+
+  //line: acc_y
+  acc_y_line = lv_line_create(lv_screen_active());
+  lv_obj_set_size(acc_y_line, 240, 240);
+  lv_obj_set_style_line_width(acc_y_line, 2, LV_PART_MAIN);
+  lv_obj_set_style_line_color(acc_y_line, lv_color_hex(0x00ff00), LV_PART_MAIN);
+  
+  //line: acc_z
+  acc_z_line = lv_line_create(lv_screen_active());
+  lv_obj_set_size(acc_z_line, 240, 240);
+  lv_obj_set_style_line_width(acc_z_line, 2, LV_PART_MAIN);
+  lv_obj_set_style_line_color(acc_z_line, lv_color_hex(0x0000ff), LV_PART_MAIN);
 }
 
 void pageChange() { //other than page 0, all other pages have the same format: icon, panel and a label
@@ -248,25 +284,23 @@ void setupPage() {
     lv_obj_set_size(panel_name, 95, 35);
     //image: icon
     lv_img_set_src(image_icon, &STOPWATCH_ICON_INFO);
-  } else if (app == 2) {
-    //label: name
+  } else if (page == 2) {
     lv_label_set_text(label_name, "Timer");
-    //panel: name
     lv_obj_set_size(panel_name, 60, 35);
-    //image: icon
     lv_img_set_src(image_icon, &TIMER_ICON_INFO);
-  } else if (app == 3) {
-    //panel: name
+  } else if (page == 3) {
     lv_obj_set_size(panel_name, 115, 35);
-    //label: name
     lv_label_set_text(label_name, "Temp & Hum");
-    //image: icon
     lv_img_set_src(image_icon, &TEMP_ICON_INFO);
+  } else if (page == 4) {
+    lv_obj_set_size(panel_name, 115, 35);
+    lv_label_set_text(label_name, "Acc & Gyro");
+    lv_img_set_src(image_icon, &GYRO_ICON_INFO);
   }
 }
 
 void appChange() {
-  if (page == 0) { //time
+  if (app == 0) { //time
     setupHomeApp();
     lv_obj_remove_flag(label_time, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(label_name, LV_OBJ_FLAG_HIDDEN);
@@ -295,13 +329,20 @@ void appChange() {
     lv_obj_add_flag(scale_temp, LV_OBJ_FLAG_HIDDEN);
   } else if (app == 3) { //temperature
     setupTempApp();
-    updateTemp();
     lv_obj_remove_flag(label_time, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(label_name, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(label_date, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(panel_name, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(chart_temp, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(scale_temp, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(image_icon, LV_OBJ_FLAG_HIDDEN);
+  } else if (app == 4) { //accelerometer & gyroscope
+    lv_obj_remove_flag(label_time, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(label_name, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(label_date, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(panel_name, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(chart_temp, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(scale_temp, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(image_icon, LV_OBJ_FLAG_HIDDEN);
   }
 }
@@ -328,6 +369,8 @@ void setupTimerApp() {
 }
 
 void setupTempApp() {
+  updateTempChart();
+
   //label: time
   lv_obj_set_style_text_font(label_time, &lv_font_montserrat_20, LV_PART_MAIN);
   lv_obj_set_style_text_letter_space(label_time, 0, LV_PART_MAIN);
@@ -335,18 +378,21 @@ void setupTempApp() {
 }
 
 
-void updateTemp() {
+void updateTempChart() {
   int temp_max = -10000;
   int temp_min = 10000;
   int32_t *temp_arr = lv_chart_get_series_y_array(chart_temp, ser_temp);
   for (int i = 0; i < 10; i++) {
     int temp_arr_val = *(temp_arr + i);
     Serial.println(temp_arr_val);
-    if (temp_arr_val > temp_max && temp_arr_val < 10000) {
-      temp_max = temp_arr_val;
-    }
-    if (temp_arr_val < temp_min && temp_arr_val > -10000) {
-      temp_min = temp_arr_val;
+    if (-10000 < temp_arr_val && temp_arr_val < 10000) {
+      lv_label_set_text_fmt(label_time, "%i°C", temp_arr_val);
+      if (temp_arr_val > temp_max) {
+        temp_max = temp_arr_val;
+      }
+      if (temp_arr_val < temp_min) {
+        temp_min = temp_arr_val;
+      }
     }
   }
 
@@ -453,6 +499,7 @@ struct previousMillis {
   unsigned long time;
   unsigned long timeFlicker;
   unsigned long temp;
+  unsigned long gyro;
 };
 previousMillis prevMillis;
 
@@ -544,6 +591,14 @@ void loop() {
               timerTime = 0;
             }
           }
+        } else if (app == 3) {
+
+        } else if (app == 4) {
+          if (gyroMode < 1) {
+            gyroMode++;
+          } else {
+            gyroMode = 0;
+          }
         }
       }
     }
@@ -576,10 +631,47 @@ void loop() {
     sht4.getEvent(&humidity, &temp);
     lv_chart_set_next_value(chart_temp, ser_temp, temp.temperature * 100);
     if (app == 3) {
-      lv_label_set_text_fmt(label_time, "%.2f°C\n%.2f%%", temp.temperature, humidity.relative_humidity);
-      updateTemp();
+      updateTempChart();
     }
     prevMillis.temp = millis();
+  }
+
+  if (app == 4) {
+    sensors_event_t a, g, temp;
+    mpu.getEvent(&a, &g, &temp); 
+    int x, y, z;
+    bool left, top, front;
+    if (gyroMode == 0) {
+      x = 120+120*a.acceleration.x/10;
+      y = 120-120*a.acceleration.y/10;
+      z = 60*a.acceleration.z/10;
+      left = a.acceleration.x > 0;
+      top = a.acceleration.y > 0;
+      front = a.acceleration.z > 0;
+
+      lv_label_set_text_fmt(label_time, "%.2f", a.acceleration.x);
+      lv_label_set_text_fmt(label_name, "%.2f", a.acceleration.y);
+      lv_label_set_text_fmt(label_date, "%.2f", a.acceleration.z);
+    } else if (gyroMode == 1) {
+      x = 120+120*g.gyro.x/15;
+      y = 120-120*g.gyro.y/15;
+      z = 60*g.gyro.z/15;
+      left = g.gyro.x > 0;
+      top = g.gyro.y > 0;
+      front = g.gyro.z > 0;
+
+      lv_label_set_text_fmt(label_time, "%.2f", g.gyro.x);
+      lv_label_set_text_fmt(label_name, "%.2f", g.gyro.y);
+      lv_label_set_text_fmt(label_date, "%.2f", g.gyro.z);
+    
+    }
+
+    lv_point_precise_t x_line_points[] = {{120, 120}, {x, 120}, {x+5-10*left, 115}, {x, 120}, {x+5-10*left, 125}}; //draws line and arrow
+    lv_point_precise_t y_line_points[] = {{120, 120}, {120, y}, {115, y-5+10*top}, {120, y}, {125, y-5+10*top}};
+    lv_point_precise_t z_line_points[] = {{120, 120}, {120 - z, 120 + z}, {120-z, 120+z+6-12*front}, {120 - z, 120 + z}, {120-z-6+12*front, 120+z}};
+    lv_line_set_points(acc_x_line, x_line_points, 5);
+    lv_line_set_points(acc_y_line, y_line_points, 5);
+    lv_line_set_points(acc_z_line, z_line_points, 5);
   }
 
   if (millis() - prevMillis.lvgl > 5) {
