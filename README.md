@@ -24,7 +24,8 @@ Components are bought from DigiKey, AliExpress and Amazon
 
 ## PCB
 Use JLCPCB or other PCB fabrication services. If not using assembly option and soldering by yourself, by stencil and solder paste as well.
-<img src="https://github.com/alexew0923/Smartwatch/blob/main/KiCad/PCB.png" width=30% height=30%>
+
+<img src="https://github.com/alexew0923/Smartwatch/blob/main/KiCad/PCB.png" width=50% height=50%>
 
 # Core Features
 This smartwatch uses LVGL graphics library to develop user interface.
