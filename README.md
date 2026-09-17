@@ -29,6 +29,7 @@ Use JLCPCB or other PCB fabrication services. If not using assembly option and s
 
 # Core Features
 This smartwatch uses LVGL graphics library to develop user interface.
+
 <img src="https://github.com/alexew0923/Smartwatch/blob/main/Smartwatch_Physical.jpeg" width=30% height=30%>
 ## Current Features
 1. Uses DS3231 RTC module, keeping time reliably even when the battery is dead.
