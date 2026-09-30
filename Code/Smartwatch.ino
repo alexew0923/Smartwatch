@@ -1,3 +1,5 @@
+//todo: custom function for darkmode, clock app back button loop, create uniform style across different widgets
+
 //icons from Phosphor Icons
 //https://notisrac.github.io/FileToCArray/ to convert icons to C array
 #include <lvgl.h>
@@ -11,7 +13,8 @@
 #include "timer.h"
 #include "temperature.h"
 #include "gyroscope.h"
-
+int address = 0x29;
+int x0, x1;
 //Custom Icons
 LV_IMG_DECLARE(STOPWATCH_ICON_INFO);
 LV_IMG_DECLARE(TIMER_ICON_INFO);
@@ -30,7 +33,8 @@ char daysOfTheWeek[7][12] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thurs
 
 int page = 0;
 int app = -1;
-int gyroMode = 0;
+bool gyroMode = false;
+int avgALS[10] = {5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000};
 
 /*Set to your screen resolution and rotation*/
 #define TFT_HOR_RES 240
@@ -80,6 +84,12 @@ void setup() {
 
   Serial.begin(115200);
   Serial.println(LVGL_Arduino);
+
+  Wire.begin(); //initialize i2c bus
+  Wire.beginTransmission(0x29);
+  byte command[3] = {0x00, 0b10000000, 0b00011000}; //initial setting for VEML6035
+  Wire.write(command, 3);
+  Wire.endTransmission();
 
   if (!sht4.begin()) {
     Serial.println("Couldn't find SHT4x");
@@ -164,11 +174,11 @@ lv_obj_t *panel_name;
 lv_obj_t *image_icon;
 lv_obj_t *chart_temp;
 lv_chart_series_t *ser_temp;
+lv_chart_series_t *ser_hum;
 lv_obj_t *scale_temp;
-lv_obj_t *acc_x_line;
-lv_obj_t *acc_y_line;
-lv_obj_t *acc_z_line;
-
+lv_obj_t *scale_hum;
+lv_obj_t *gyro_line;
+lv_point_precise_t gyro_line_points[6];
 
 void widgetSetup() {
   //chart: temp
@@ -181,6 +191,7 @@ void widgetSetup() {
   lv_obj_set_style_border_opa(chart_temp, LV_OPA_0, LV_PART_MAIN);
   lv_obj_set_style_pad_hor(chart_temp, 30, LV_PART_MAIN);
   ser_temp = lv_chart_add_series(chart_temp, lv_color_hex(0x000000), LV_CHART_AXIS_PRIMARY_Y);
+  ser_hum = lv_chart_add_series(chart_temp, lv_color_hex(0x000000), LV_CHART_AXIS_SECONDARY_Y);
 
   //label: time
   label_time = lv_label_create(lv_screen_active());
@@ -211,6 +222,8 @@ void widgetSetup() {
   //image: icon
   image_icon = lv_image_create(lv_screen_active());
   lv_obj_align(image_icon, LV_ALIGN_CENTER, 0, -20);
+  lv_obj_set_style_img_recolor(image_icon, lv_color_hex(0xffffff), LV_PART_MAIN);
+  lv_obj_set_style_img_recolor_opa(image_icon, LV_OPA_TRANSP, LV_PART_MAIN);
   
   //scale: temp
   scale_temp = lv_scale_create(lv_screen_active());
@@ -223,24 +236,23 @@ void widgetSetup() {
   lv_obj_set_style_length(scale_temp, 5, LV_PART_ITEMS);
   lv_obj_set_style_length(scale_temp, 10, LV_PART_INDICATOR);
 
-  //line: acc_x
-  acc_x_line = lv_line_create(lv_screen_active());
-  lv_obj_set_size(acc_x_line, 240, 240);
-  lv_obj_set_style_line_width(acc_x_line, 2, LV_PART_MAIN);
-  lv_obj_set_style_line_color(acc_x_line, lv_color_hex(0xff0000), LV_PART_MAIN);
+  //scale: hum
+  scale_hum = lv_scale_create(lv_screen_active());
+  lv_obj_align(scale_hum, LV_ALIGN_CENTER, -85, 0);
+  lv_scale_set_mode(scale_hum, LV_SCALE_MODE_VERTICAL_RIGHT);
+  lv_obj_set_size(scale_hum, 30, 200);
+  lv_scale_set_label_show(scale_hum, true);
+  lv_scale_set_total_tick_count(scale_hum, 13);
+  lv_scale_set_major_tick_every(scale_hum, 3);
+  lv_obj_set_style_length(scale_hum, 5, LV_PART_ITEMS);
+  lv_obj_set_style_length(scale_hum, 10, LV_PART_INDICATOR);
 
-  //line: acc_y
-  acc_y_line = lv_line_create(lv_screen_active());
-  lv_obj_set_size(acc_y_line, 240, 240);
-  lv_obj_set_style_line_width(acc_y_line, 2, LV_PART_MAIN);
-  lv_obj_set_style_line_color(acc_y_line, lv_color_hex(0x00ff00), LV_PART_MAIN);
-  
-  //line: acc_z
-  acc_z_line = lv_line_create(lv_screen_active());
-  lv_obj_set_size(acc_z_line, 240, 240);
-  lv_obj_set_style_line_width(acc_z_line, 2, LV_PART_MAIN);
-  lv_obj_set_style_line_color(acc_z_line, lv_color_hex(0x0000ff), LV_PART_MAIN);
+  //line: gyro
+  gyro_line = lv_line_create(lv_screen_active());
+  lv_obj_set_size(gyro_line, 240, 240);
+  lv_obj_set_style_line_width(gyro_line, 2, LV_PART_MAIN);
 }
+
 
 void pageChange() { //other than page 0, all other pages have the same format: icon, panel and a label
   if (page == 0) { //time
@@ -258,23 +270,8 @@ void pageChange() { //other than page 0, all other pages have the same format: i
   lv_obj_remove_flag(label_name, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(chart_temp, LV_OBJ_FLAG_HIDDEN);
   lv_obj_add_flag(scale_temp, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(scale_hum, LV_OBJ_FLAG_HIDDEN);
 }
-
-
-void setupHomepage() {
-  //label: date
-  lv_obj_set_y(label_date, -80);
-  //label: time
-  lv_obj_set_style_text_font(label_time, &lv_font_montserrat_48, LV_PART_MAIN); /*Set a larger font*/
-  lv_obj_set_style_text_letter_space(label_time, 5, LV_PART_MAIN);
-  lv_obj_set_y(label_time, -10);
-  updateTime(0);
-  //label: name
-  lv_label_set_text(label_name, "Welcome, Eunwoo");
-  //panel: name
-  lv_obj_set_size(panel_name, 150, 35);
-}
-
 
 void setupPage() {
   if (page == 1) {
@@ -309,6 +306,7 @@ void appChange() {
     lv_obj_add_flag(image_icon, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(chart_temp, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(scale_temp, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(scale_hum, LV_OBJ_FLAG_HIDDEN);
   } else if (app == 1) { //stopwatch
     setupStopwatchApp();
     lv_obj_remove_flag(label_time, LV_OBJ_FLAG_HIDDEN);
@@ -318,6 +316,7 @@ void appChange() {
     lv_obj_add_flag(chart_temp, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(image_icon, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(scale_temp, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(scale_hum, LV_OBJ_FLAG_HIDDEN);
   } else if (app == 2) { //timer
     setupTimerApp();
     lv_obj_remove_flag(label_time, LV_OBJ_FLAG_HIDDEN);
@@ -327,6 +326,7 @@ void appChange() {
     lv_obj_add_flag(chart_temp, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(image_icon, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(scale_temp, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(scale_hum, LV_OBJ_FLAG_HIDDEN);
   } else if (app == 3) { //temperature
     setupTempApp();
     lv_obj_remove_flag(label_time, LV_OBJ_FLAG_HIDDEN);
@@ -335,16 +335,34 @@ void appChange() {
     lv_obj_add_flag(panel_name, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(chart_temp, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(scale_temp, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(scale_hum, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(image_icon, LV_OBJ_FLAG_HIDDEN);
   } else if (app == 4) { //accelerometer & gyroscope
+    setupGyroApp();
     lv_obj_remove_flag(label_time, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_remove_flag(label_name, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_remove_flag(label_date, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(label_name, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(label_date, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(panel_name, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(chart_temp, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(scale_temp, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(scale_hum, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(image_icon, LV_OBJ_FLAG_HIDDEN);
   }
+}
+
+
+void setupHomepage() {
+  //label: date
+  lv_obj_set_y(label_date, -80);
+  //label: time
+  lv_obj_set_style_text_font(label_time, &lv_font_montserrat_48, LV_PART_MAIN); /*Set a larger font*/
+  lv_obj_set_style_text_letter_space(label_time, 5, LV_PART_MAIN);
+  lv_obj_set_y(label_time, -10);
+  updateTime(0);
+  //label: name
+  lv_label_set_text(label_name, "Welcome, Eunwoo");
+  //panel: name
+  lv_obj_set_size(panel_name, 150, 35);
 }
 
 void setupHomeApp() {
@@ -369,7 +387,8 @@ void setupTimerApp() {
 }
 
 void setupTempApp() {
-  updateTempChart();
+  updateAxis(ser_temp, true);
+  updateAxis(ser_hum, false);
 
   //label: time
   lv_obj_set_style_text_font(label_time, &lv_font_montserrat_20, LV_PART_MAIN);
@@ -377,36 +396,14 @@ void setupTempApp() {
   lv_obj_set_y(label_time, 70);
 }
 
-
-void updateTempChart() {
-  int temp_max = -10000;
-  int temp_min = 10000;
-  int32_t *temp_arr = lv_chart_get_series_y_array(chart_temp, ser_temp);
-  for (int i = 0; i < 10; i++) {
-    int temp_arr_val = *(temp_arr + i);
-    Serial.println(temp_arr_val);
-    if (-10000 < temp_arr_val && temp_arr_val < 10000) {
-      lv_label_set_text_fmt(label_time, "%i°C", temp_arr_val);
-      if (temp_arr_val > temp_max) {
-        temp_max = temp_arr_val;
-      }
-      if (temp_arr_val < temp_min) {
-        temp_min = temp_arr_val;
-      }
-    }
-  }
-
-  int buffer = (temp_max - temp_min) * 0.1;
-  temp_max += buffer;
-  temp_min -= buffer;
-  Serial.println(temp_max);
-  Serial.println(temp_min);
-  lv_chart_set_axis_range(chart_temp, LV_CHART_AXIS_PRIMARY_Y, temp_min, temp_max);
-  lv_scale_set_range(scale_temp, temp_min, temp_max);
+void setupGyroApp() {
+  //label: time
+  lv_obj_set_y(label_time, 0);
+  lv_obj_set_style_text_letter_space(label_time, 0, LV_PART_MAIN);
+  lv_obj_set_style_text_font(label_time, &lv_font_montserrat_20, LV_PART_MAIN);
 }
 
 DateTime now;
-
 void updateTime(int minute) {
   // Get the current time from the RTC
   now = rtc.now();
@@ -445,7 +442,6 @@ void updateTime(int minute) {
 
 bool stopwatchOn = false;
 long stopwatchTime;
-
 void updateStopwatch() {
   if (stopwatchTime == 0) {
     lv_label_set_text(label_time, "00:00:00");
@@ -465,7 +461,6 @@ unsigned long timerTime;
 unsigned long timerStartTime;
 unsigned long beepTime;
 bool beepOn;
-
 void updateTimer() {
   unsigned long tempTime = timerTime;
 
@@ -494,12 +489,74 @@ void updateTimer() {
 }
 
 
+void updateAxis(lv_chart_series_t *axis, bool primaryY) {
+  int max = -10000;
+  int min = 10000;
+  int32_t *arr = lv_chart_get_series_y_array(chart_temp, axis);
+
+  for (int i = 0; i < 10; i++) {
+    int arr_val = *(arr + i);
+    if (-10000 < arr_val && arr_val < 10000) {
+      if (arr_val > max) {
+        max = arr_val;
+      }
+      if (arr_val < min) {
+        min = arr_val;
+      }
+    }
+  }
+
+  int buffer = (max - min) * 0.1;
+  max += buffer;
+  min -= buffer;
+  if (primaryY) {
+    lv_chart_set_axis_range(chart_temp, LV_CHART_AXIS_PRIMARY_Y, min, max);
+    lv_scale_set_range(scale_temp, min, max);
+  } else {
+    lv_chart_set_axis_range(chart_temp, LV_CHART_AXIS_SECONDARY_Y, min, max);
+    lv_scale_set_range(scale_hum, min, max);
+  }
+}
+
+
+void updateGyro() {
+  sensors_event_t a, g, temp;
+  mpu.getEvent(&a, &g, &temp); 
+  int x, y, z;
+  if (!gyroMode) {
+    x = 120+120*a.acceleration.x/10;
+    y = 120-120*a.acceleration.y/10;
+    z = 60*a.acceleration.z/10;
+
+    lv_label_set_text_fmt(label_time, "Acceleration\nX: %.2f\nY: %.2f\nZ: %.2f", a.acceleration.x, a.acceleration.y, a.acceleration.z);
+  } else {
+    x = 120+120*g.gyro.x/15;
+    y = 120-120*g.gyro.y/15;
+    z = 60*g.gyro.z/15;
+
+    lv_label_set_text_fmt(label_time, "Gyroscope\nX: %.2f\nY: %.2f\nZ: %.2f", g.gyro.x, g.gyro.y, g.gyro.z);
+  }
+  setGyroCoord(x, y, z);
+  lv_line_set_points(gyro_line, gyro_line_points, 6);
+}
+
+void setGyroCoord(int& x, int& y, int& z) {
+  gyro_line_points[0] = {120, 120};
+  gyro_line_points[1] = {x, 120};
+  gyro_line_points[2] = {120, 120};
+  gyro_line_points[3] = {120, y};
+  gyro_line_points[4] = {120, 120};
+  gyro_line_points[5] = {120 - z, 120 + z};
+}
+
+
 struct previousMillis {
   unsigned long lvgl;
   unsigned long time;
   unsigned long timeFlicker;
   unsigned long temp;
   unsigned long gyro;
+  unsigned long als;
 };
 previousMillis prevMillis;
 
@@ -564,6 +621,10 @@ void loop() {
           } else {
             timerTime += 1000;
           }
+        } else if (app == 3) {
+
+        } else if (app == 3) {
+          gyroMode = !gyroMode;
         }
       }
     }
@@ -594,11 +655,7 @@ void loop() {
         } else if (app == 3) {
 
         } else if (app == 4) {
-          if (gyroMode < 1) {
-            gyroMode++;
-          } else {
-            gyroMode = 0;
-          }
+          gyroMode = !gyroMode;
         }
       }
     }
@@ -630,49 +687,72 @@ void loop() {
     sensors_event_t humidity, temp;
     sht4.getEvent(&humidity, &temp);
     lv_chart_set_next_value(chart_temp, ser_temp, temp.temperature * 100);
+    lv_chart_set_next_value(chart_temp, ser_hum, humidity.relative_humidity * 100);
     if (app == 3) {
-      updateTempChart();
+      lv_label_set_text_fmt(label_time, "%.2f°C\n%.2f%%", temp.temperature, humidity.relative_humidity);
+      updateAxis(ser_temp, true);
+      updateAxis(ser_hum, false);
     }
     prevMillis.temp = millis();
   }
 
   if (app == 4) {
-    sensors_event_t a, g, temp;
-    mpu.getEvent(&a, &g, &temp); 
-    int x, y, z;
-    bool left, top, front;
-    if (gyroMode == 0) {
-      x = 120+120*a.acceleration.x/10;
-      y = 120-120*a.acceleration.y/10;
-      z = 60*a.acceleration.z/10;
-      left = a.acceleration.x > 0;
-      top = a.acceleration.y > 0;
-      front = a.acceleration.z > 0;
-
-      lv_label_set_text_fmt(label_time, "%.2f", a.acceleration.x);
-      lv_label_set_text_fmt(label_name, "%.2f", a.acceleration.y);
-      lv_label_set_text_fmt(label_date, "%.2f", a.acceleration.z);
-    } else if (gyroMode == 1) {
-      x = 120+120*g.gyro.x/15;
-      y = 120-120*g.gyro.y/15;
-      z = 60*g.gyro.z/15;
-      left = g.gyro.x > 0;
-      top = g.gyro.y > 0;
-      front = g.gyro.z > 0;
-
-      lv_label_set_text_fmt(label_time, "%.2f", g.gyro.x);
-      lv_label_set_text_fmt(label_name, "%.2f", g.gyro.y);
-      lv_label_set_text_fmt(label_date, "%.2f", g.gyro.z);
-    
-    }
-
-    lv_point_precise_t x_line_points[] = {{120, 120}, {x, 120}, {x+5-10*left, 115}, {x, 120}, {x+5-10*left, 125}}; //draws line and arrow
-    lv_point_precise_t y_line_points[] = {{120, 120}, {120, y}, {115, y-5+10*top}, {120, y}, {125, y-5+10*top}};
-    lv_point_precise_t z_line_points[] = {{120, 120}, {120 - z, 120 + z}, {120-z, 120+z+6-12*front}, {120 - z, 120 + z}, {120-z-6+12*front, 120+z}};
-    lv_line_set_points(acc_x_line, x_line_points, 5);
-    lv_line_set_points(acc_y_line, y_line_points, 5);
-    lv_line_set_points(acc_z_line, z_line_points, 5);
+    updateGyro();
   }
+
+
+
+
+  /*Wire.beginTransmission(address);
+  Wire.write(0x04);
+  Wire.requestFrom(address, 2);
+
+  if (Wire.available() <= 2) {
+    x0 = Wire.read();
+    x1 = Wire.read();
+  }
+  lv_label_set_text_fmt(label_name, "%d\n%d", x0, x1);*/
+
+  if (millis() - prevMillis.als > 500) {
+    //calculate ambient brightness with VEML6035
+    Wire.beginTransmission(0x29);
+    Wire.write(0x04);
+    Wire.endTransmission(false);
+    Wire.requestFrom(0x29, 2);
+    uint16_t rawLux = 0;
+    byte LSB = 0;
+    byte MSB = 0;
+    while (Wire.available() > 0) {
+      LSB = Wire.read();
+      MSB = Wire.read();
+    }
+    rawLux = MSB << 8 | LSB;
+    for (int i = 0; i < 9; i++) {
+      avgALS[i] = avgALS[i + 1];
+    }
+    int milliLux = rawLux * 128;
+    avgALS[9] = milliLux;
+    unsigned int sum;
+    for (int i = 0; i < 10; i++) {
+      sum += avgALS[i];
+    }
+    Serial.println(sum/10);
+    if (sum/10 < 10000) {
+      lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0x000000), LV_PART_MAIN);
+      lv_obj_set_style_img_recolor_opa(image_icon, LV_OPA_COVER, LV_PART_MAIN);
+      lv_obj_set_style_text_color(label_time, lv_color_hex(0xffffff), LV_PART_MAIN);
+      lv_obj_set_style_text_color(label_name, lv_color_hex(0xffffff), LV_PART_MAIN);
+      lv_obj_set_style_text_color(label_date, lv_color_hex(0xffffff), LV_PART_MAIN);    
+    } else {
+      lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0xffffff), LV_PART_MAIN);
+      lv_obj_set_style_img_recolor_opa(image_icon, LV_OPA_TRANSP, LV_PART_MAIN);
+      lv_obj_set_style_text_color(label_time, lv_color_hex(0x000000), LV_PART_MAIN);
+      lv_obj_set_style_text_color(label_name, lv_color_hex(0x000000), LV_PART_MAIN);
+      lv_obj_set_style_text_color(label_date, lv_color_hex(0x000000), LV_PART_MAIN);
+    }
+    prevMillis.als = millis();
+  }
+
 
   if (millis() - prevMillis.lvgl > 5) {
     lv_timer_handler(); /* let the GUI do its work */
