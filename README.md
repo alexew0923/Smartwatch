@@ -1,7 +1,10 @@
 # Smartch
 This repository contains all the files for the smartwatch and it is participating in the Stardance Challenge by Hack Club.
 
-# Components Used
+## Demo Video
+[![Smartwatch Demo Video](https://youtu.be/no-ELRLZ7N0)
+
+# Bill of Materials
 Components are bought from DigiKey, AliExpress and Amazon
 - XIAO ESP32C3 (main processor)
 - 450mAh LiPo Battery with PH 2.0 mm JST Connector
@@ -23,11 +26,15 @@ Components are bought from DigiKey, AliExpress and Amazon
 <img src="https://github.com/alexew0923/Smartwatch/blob/main/KiCad/Smartwatch.png" width=50% height=50%>
 
 ## PCB
-Use JLCPCB or other PCB fabrication services. If not using assembly option and soldering by yourself, by stencil and solder paste as well.
+I used JLCPCB, but you can you any other PCB fabrication services. If want to solder components by yourself rather than assembly option, order a stencil and solder paste as well.
 
 <img src="https://github.com/alexew0923/Smartwatch/blob/main/KiCad/PCB.png" width=50% height=50%>
 
-# Core Features
+## Case Design
+I 3D printed a case designed on SolidWorks. The PCB sits on the base of the case and the lid snaps into the body. When you are modifying the SolidWorks file, be careful because I am using a student version, so it will leave a watermark. If you would like to 3D print it, you can use the STL file instead.
+<img src="https://github.com/alexew0923/Smartwatch/blob/main/SolidWorks/case.png" width=50% height=50%>
+
+# Core Feature
 This smartwatch uses LVGL graphics library to develop user interface.
 
 <img src="https://github.com/alexew0923/Smartwatch/blob/main/Smartwatch_Physical.jpeg" width=30% height=30%>
@@ -36,11 +43,9 @@ This smartwatch uses LVGL graphics library to develop user interface.
 1. Uses DS3231 RTC module, keeping time reliably even when the battery is dead.
 2. Basic features in a clock app, such as stopwatch, timer and time adjustment.
 3. Uses SHT40 sensor to log temperature on a graph.
-4. Accelerometer & gyroscope readings and visualization.
+4. Accelerometer & gyroscope readings and visualization using MPU6050.
+5. Air pressure and altitude readings from BMP581.
 
-## Upcoming Features
-1. Alarm
-2. Connect to the phone via Bluetooth to receive data such as weather, message, and news.
-3. Automatic brightness adjustment with ambient light sensor.
-4. Automatic screen saver with MPU6050.
-5. Altitude reading and graph on BMP581.
+## Features for Future Version
+1. Connect to the phone via Bluetooth to receive data such as weather, message, and news.
+2. Battery voltage reading
