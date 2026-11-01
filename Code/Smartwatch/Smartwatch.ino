@@ -807,11 +807,13 @@ void loop() {
     }
     battery = 2.0 * battery / 100.0;
     Serial.println(battery);
-    int batteryPercent = map(battery, 3200, 4200, 0, 100);
+    int batteryPercent = map(battery, 3400, 4200, 0, 100);
     Serial.println(batteryPercent);
     lv_scale_set_section_range(scale_battery, battery_status, batteryPercent, 0);
     if (batteryPercent <= 20) {
       lv_style_set_arc_color(&battery_style, lv_color_hex(0xFF4D00));
+    } else {
+      lv_style_set_arc_color(&battery_style, lv_color_hex(0x000000));
     }
 
     prevMillis.time = millis();
