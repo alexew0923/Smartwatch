@@ -2,7 +2,7 @@
 This repository contains all the files for the smartwatch and it is participating in the Stardance Challenge by Hack Club.
 
 ## Demo Video
-[![Smartwatch Demo Video](https://youtu.be/no-ELRLZ7N0)
+[![Smartwatch Demo Video](https://youtu.be/no-ELRLZ7N0)]
 
 # Bill of Materials
 Components are bought from DigiKey, AliExpress and Amazon
@@ -32,6 +32,7 @@ I used JLCPCB, but you can you any other PCB fabrication services. If want to so
 
 ## Case Design
 I 3D printed a case designed on SolidWorks. The PCB sits on the base of the case and the lid snaps into the body. When you are modifying the SolidWorks file, be careful because I am using a student version, so it will leave a watermark. If you would like to 3D print it, you can use the STL file instead.
+
 <img src="https://github.com/alexew0923/Smartwatch/blob/main/SolidWorks/case.png" width=50% height=50%>
 
 # Core Feature
