@@ -2,8 +2,6 @@
 This repository contains all the files for the smartwatch and it is participating in the Stardance Challenge by Hack Club.
 
 ## Demo Video
-[![Protype Testing](https://img.youtube.com/vi/fEDwp3An3aI/0.jpg)](https://youtu.be/fEDwp3An3aI)
-
 [![Smartwatch Demo Video](https://img.youtube.com/vi/no-ELRLZ7N0/maxresdefault.jpg)](https://www.youtube.com/watch?v=no-ELRLZ7N0)
 
 # Bill of Materials
