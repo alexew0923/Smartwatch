@@ -1,4 +1,5 @@
-//todo: create uniform style across different widgets, UI update
+//uncomment Serial to debug
+//create uniform style across different widgets, UI update
 //auto display on/off and auto brightness adjustment << play with resistor to see which controls the backlight
 
 //icons from Phosphor Icons
@@ -39,6 +40,9 @@ Adafruit_BMP5xx bmp;
 RTC_DS3231 rtc;
 char daysOfTheWeek[7][12] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
 
+int batteryPercent;
+bool dark = false;
+bool prevDark = false;
 const int appNum = 5;
 int page = 0;
 int app = -1;
@@ -57,8 +61,8 @@ uint32_t draw_buf[DRAW_BUF_SIZE / 4];
 
 void my_print(lv_log_level_t level, const char *buf) {
   LV_UNUSED(level);
-  Serial.println(buf);
-  Serial.flush();
+  //Serial.println(buf);
+  //Serial.flush();
 }
 
 /* LVGL calls it when a rendered image needs to copied to the display*/
@@ -92,8 +96,8 @@ void setup() {
   String LVGL_Arduino = "Hello Arduino! ";
   LVGL_Arduino += String('V') + lv_version_major() + "." + lv_version_minor() + "." + lv_version_patch();
 
-  Serial.begin(115200);
-  Serial.println(LVGL_Arduino);
+  //Serial.begin(115200);
+  //Serial.println(LVGL_Arduino);
 
   Wire.begin();  //initialize i2c bus
   Wire.beginTransmission(0x29);
@@ -102,7 +106,7 @@ void setup() {
   Wire.endTransmission();
 
   if (!sht4.begin()) {
-    Serial.println("Couldn't find SHT4x");
+    //Serial.println("Couldn't find SHT4x");
     while (1) delay(1);
   }
   sht4.setPrecision(SHT4X_HIGH_PRECISION);
@@ -123,13 +127,13 @@ void setup() {
   mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
 
   if (!rtc.begin()) {
-    Serial.println("Couldn't find RTC");
-    Serial.flush();
+    //Serial.println("Couldn't find RTC");
+    //Serial.flush();
     while (1) delay(10);
   }
 
   if (rtc.lostPower()) {
-    Serial.println("RTC lost power, let's set the time!");
+    //Serial.println("RTC lost power, let's set the time!");
     // When time needs to be set on a new device, or after a power loss, the
     // following line sets the RTC to the date & time this sketch was compiled
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
@@ -174,7 +178,7 @@ void setup() {
   pageChange();
   setupHomepage();
 
-  Serial.println("Setup done");
+  //Serial.println("Setup done");
 }
 
 /*  When creating a new app, take the following steps
@@ -531,7 +535,7 @@ void updateTime(int minute) {
   String formattedTime = dayOfWeek + ", " + yearStr + "-" + monthStr + "-" + dayStr + " " + hourStr + ":" + minuteStr + ":" + secondStr;
 
   // Print the complete formatted time
-  Serial.println(formattedTime);
+  //Serial.println(formattedTime);
 
   lv_label_set_text_fmt(label_time, "%02u\n%02u", now.hour(), now.minute());
   lv_label_set_text_fmt(label_date, "%u-%02u-%02u", now.year(), now.month(), now.day());
@@ -661,19 +665,51 @@ void updatePressureApp() {
   lv_scale_set_line_needle_value(gauge_pressure, line_pressure, 80, bmp.pressure);
 }
 
-void darkMode(int avgLux) {
-  if (avgLux < 10000) {
+void darkMode() {
+  if (dark) {
     lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0x000000), LV_PART_MAIN);
     lv_obj_set_style_img_recolor_opa(image_icon, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_text_color(label_time, lv_color_hex(0xffffff), LV_PART_MAIN);
     lv_obj_set_style_text_color(label_name, lv_color_hex(0xffffff), LV_PART_MAIN);
     lv_obj_set_style_text_color(label_date, lv_color_hex(0xffffff), LV_PART_MAIN);
+    lv_obj_set_style_line_color(gyro_line, lv_color_hex(0xffffff), LV_PART_MAIN);
+    lv_obj_set_style_line_color(line_pressure, lv_color_hex(0xffffff), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(circle, lv_color_hex(0xffffff), LV_PART_MAIN);
+    
+    lv_obj_set_style_arc_color(gauge_pressure, lv_color_hex(0xffffff), LV_PART_MAIN);
+    lv_obj_set_style_line_color(gauge_pressure, lv_color_hex(0xffffff), LV_PART_ITEMS);
+    lv_obj_set_style_line_color(gauge_pressure, lv_color_hex(0xffffff), LV_PART_INDICATOR);
+    lv_obj_set_style_text_color(gauge_pressure, lv_color_hex(0xffffff), LV_PART_INDICATOR);
+
+    lv_obj_set_style_arc_color(scale_battery, lv_color_hex(0xffffff), LV_PART_MAIN);
+    lv_obj_set_style_line_color(scale_battery, lv_color_hex(0xffffff), LV_PART_ITEMS);
+    lv_obj_set_style_line_color(scale_battery, lv_color_hex(0xffffff), LV_PART_INDICATOR);
+    lv_obj_set_style_text_color(scale_battery, lv_color_hex(0xffffff), LV_PART_INDICATOR);
+    if (batteryPercent > 20) {
+      lv_style_set_arc_color(&battery_style, lv_color_hex(0xffffff));
+    }
   } else {
     lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0xffffff), LV_PART_MAIN);
     lv_obj_set_style_img_recolor_opa(image_icon, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_text_color(label_time, lv_color_hex(0x000000), LV_PART_MAIN);
     lv_obj_set_style_text_color(label_name, lv_color_hex(0x000000), LV_PART_MAIN);
     lv_obj_set_style_text_color(label_date, lv_color_hex(0x000000), LV_PART_MAIN);
+    lv_obj_set_style_line_color(gyro_line, lv_color_hex(0x000000), LV_PART_MAIN);
+    lv_obj_set_style_line_color(line_pressure, lv_color_hex(0x000000), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(circle, lv_color_hex(0x000000), LV_PART_MAIN);
+
+    lv_obj_set_style_arc_color(gauge_pressure, lv_color_hex(0x000000), LV_PART_MAIN);
+    lv_obj_set_style_line_color(gauge_pressure, lv_color_hex(0x000000), LV_PART_ITEMS);
+    lv_obj_set_style_line_color(gauge_pressure, lv_color_hex(0x000000), LV_PART_INDICATOR);
+    lv_obj_set_style_text_color(gauge_pressure, lv_color_hex(0x000000), LV_PART_INDICATOR);
+
+    lv_obj_set_style_arc_color(scale_battery, lv_color_hex(0x000000), LV_PART_MAIN);
+    lv_obj_set_style_line_color(scale_battery, lv_color_hex(0x000000), LV_PART_ITEMS);
+    lv_obj_set_style_line_color(scale_battery, lv_color_hex(0x000000), LV_PART_INDICATOR);
+    lv_obj_set_style_text_color(scale_battery, lv_color_hex(0x000000), LV_PART_INDICATOR);
+    if (batteryPercent > 20) {
+      lv_style_set_arc_color(&battery_style, lv_color_hex(0x000000));
+    }
   }
 }
 
@@ -720,10 +756,10 @@ void loop() {
   } else {
     button.both = false;
     if (button.previous) {
-      Serial.println("Previous");
+      //Serial.println("Previous");
       button.previous = false;
       if (millis() - button.time > 500) {
-        Serial.print("Entering App");
+        //Serial.print("Entering App");
         app = page;
         appChange();
       } else {
@@ -762,10 +798,10 @@ void loop() {
       }
     }
     if (button.next) {
-      Serial.println("Next");
+      //Serial.println("Next");
       button.next = false;
       if (millis() - button.time > 500) {
-        Serial.print("Exiting App");
+        //Serial.print("Exiting App");
         app = -1;
         pageChange();
       } else {
@@ -806,14 +842,18 @@ void loop() {
       battery += analogReadMilliVolts(3);
     }
     battery = 2.0 * battery / 100.0;
-    Serial.println(battery);
-    int batteryPercent = map(battery, 3400, 4200, 0, 100);
-    Serial.println(batteryPercent);
+    //Serial.println(battery);
+    batteryPercent = map(battery, 3400, 4200, 0, 100);
+    //Serial.println(batteryPercent);
     lv_scale_set_section_range(scale_battery, battery_status, batteryPercent, 0);
     if (batteryPercent <= 20) {
       lv_style_set_arc_color(&battery_style, lv_color_hex(0xFF4D00));
     } else {
-      lv_style_set_arc_color(&battery_style, lv_color_hex(0x000000));
+      if (dark) {
+        lv_style_set_arc_color(&battery_style, lv_color_hex(0xffffff));
+      } else {
+        lv_style_set_arc_color(&battery_style, lv_color_hex(0x000000));
+      }
     }
 
     prevMillis.time = millis();
@@ -884,8 +924,17 @@ void loop() {
     for (int i = 0; i < 10; i++) {
       sum += avgALS[i];
     }
-    Serial.println(sum / 10);
-    darkMode(sum / 10);
+    //Serial.println(sum / 10);
+    if (sum/10 < 10000) {
+      dark = true;
+    } else {
+      dark = false;
+    }
+
+    if (prevDark != dark) {
+      darkMode();
+      prevDark = dark;
+    }
     prevMillis.als = millis();
   }
 
