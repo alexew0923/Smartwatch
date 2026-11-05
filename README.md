@@ -22,7 +22,7 @@ For more information, refer to the excel file under KiCad.
 - SMD BMP581 Air Pressure Sensor (DigiKey part number: 828-BMP581CT-ND)
 - SMD CPT-9019A-SMT-TR Passive Buzzer (DigiKey part number: 2223-CPT-9019A-SMT-TRCT-ND)
 
-It costs 49.45 CAD in total
+The total cost is 49.45 CAD.
 
 ## KiCad Designs
 ## Schematic
