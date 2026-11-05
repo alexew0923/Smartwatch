@@ -26,7 +26,7 @@ The total cost is 49.45 CAD.
 
 ## KiCad Designs
 ## Schematic
-<img src="https://github.com/alexew0923/Smartwatch/blob/main/KiCad/Smartwatch.png" width=50% height=50%>
+<img src="https://github.com/alexew0923/Smartwatch/blob/main/KiCad/Schematic.svg" width=50% height=50%>
 
 ## PCB
 I used JLCPCB, but you can you any other PCB fabrication services. I selected 1.6 mm white PCB. If want to solder components by yourself rather than assembly option, order a stencil and solder paste as well. When soldering the battery connector, double check the polarity!
