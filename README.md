@@ -5,7 +5,8 @@ This repository contains all the files for the smartwatch and it is participatin
 [![Smartwatch Demo Video](https://img.youtube.com/vi/no-ELRLZ7N0/maxresdefault.jpg)](https://www.youtube.com/watch?v=no-ELRLZ7N0)
 
 # Bill of Materials
-Components are bought from DigiKey, AliExpress and Amazon
+Components are bought from DigiKey, AliExpress and Amazon.
+For more information, refer to the excel file under KiCad.
 - XIAO ESP32C3 (main processor)
 - 450mAh LiPo Battery with PH 2.0 mm JST Connector
 - PH 2.0 mm JST Connector
@@ -21,12 +22,15 @@ Components are bought from DigiKey, AliExpress and Amazon
 - SMD BMP581 Air Pressure Sensor (DigiKey part number: 828-BMP581CT-ND)
 - SMD CPT-9019A-SMT-TR Passive Buzzer (DigiKey part number: 2223-CPT-9019A-SMT-TRCT-ND)
 
+It costs 49.45 CAD in total
+
 ## KiCad Designs
 ## Schematic
 <img src="https://github.com/alexew0923/Smartwatch/blob/main/KiCad/Smartwatch.png" width=50% height=50%>
 
 ## PCB
-I used JLCPCB, but you can you any other PCB fabrication services. If want to solder components by yourself rather than assembly option, order a stencil and solder paste as well.
+I used JLCPCB, but you can you any other PCB fabrication services. I selected 1.6 mm white PCB. If want to solder components by yourself rather than assembly option, order a stencil and solder paste as well. When soldering the battery connector, double check the polarity!
+There are schematic and PCB file under KiCad, so feel free to modify it or if you would like to order it right away, download Smartwatch.zip file which contains gerber files and upload it onto PCB manufacture's website.
 
 <img src="https://github.com/alexew0923/Smartwatch/blob/main/KiCad/PCB.png" width=50% height=50%>
 
@@ -38,7 +42,7 @@ I 3D printed a case designed on SolidWorks. The PCB sits on the base of the case
 # Core Feature
 This smartwatch uses LVGL graphics library to develop user interface.
 
-<img src="https://github.com/alexew0923/Smartwatch/blob/main/Smartwatch_Physical.jpeg" width=30% height=30%>
+<img src="https://github.com/alexew0923/Smartwatch/blob/main/Smartwatch.jpeg" width=30% height=30%>
 
 ## Current Features
 1. Uses DS3231 RTC module, keeping time reliably even when the battery is dead.
