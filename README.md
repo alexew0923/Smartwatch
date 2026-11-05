@@ -42,7 +42,7 @@ I 3D printed a case designed on SolidWorks. The PCB sits on the base of the case
 # Core Feature
 This smartwatch uses LVGL graphics library to develop user interface.
 
-<img src="https://github.com/alexew0923/Smartwatch/blob/main/Smartwatch.jpeg" width=30% height=30%>
+<img src="https://github.com/alexew0923/Smartwatch/blob/main/Smartwatch.png" width=50% height=50%>
 
 ## Current Features
 1. Uses DS3231 RTC module, keeping time reliably even when the battery is dead.
